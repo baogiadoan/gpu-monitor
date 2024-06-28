@@ -70,19 +70,34 @@ def get_gpu_infos(nvidiasmi_output):
     return gpu_infos
 
 def display_gpu_infos(stdscr, server, gpu_infos, col, row_offset):
-    stdscr.addstr(row_offset, col, f"Server: {server}")
+    try:
+        stdscr.addstr(row_offset, col, f"Server: {server}")
+    except curses.error:
+        return row_offset
     row = row_offset + 1
     for gpu_info in gpu_infos:
-        stdscr.addstr(row, col, f"GPU {gpu_info['index']} - {gpu_info['name']}")
-        row += 1
-        stdscr.addstr(row, col, f"  Memory Total: {gpu_info['memory_total']} MiB")
-        row += 1
-        stdscr.addstr(row, col, f"  Memory Used: ", curses.color_pair(1))
-        stdscr.addstr(f"{gpu_info['memory_used']} MiB", curses.color_pair(2))
-        row += 1
-        stdscr.addstr(row, col, f"  Memory Free: ", curses.color_pair(1))
-        stdscr.addstr(f"{gpu_info['memory_free']} MiB", curses.color_pair(3))
-        row += 3  # Increased space between GPUs
+        if row >= curses.LINES - 1:
+            break
+        try:
+            stdscr.addstr(row, col, f"GPU {gpu_info['index']} - {gpu_info['name']}")
+            row += 1
+            stdscr.addstr(row, col, f"  Memory Total: {gpu_info['memory_total']} MiB")
+            row += 1
+            stdscr.addstr(row, col, f"  Memory Used: ", curses.color_pair(1))
+            stdscr.addstr(f"{gpu_info['memory_used']} MiB", curses.color_pair(2))
+            row += 1
+            stdscr.addstr(row, col, f"  Memory Free: ", curses.color_pair(1))
+            stdscr.addstr(f"{gpu_info['memory_free']} MiB", curses.color_pair(3))
+            row += 2
+        except curses.error:
+            break
+    if row < curses.LINES - 1:
+        try:
+            stdscr.addstr(row, col, "-" * (curses.COLS // 2 - 1))
+        except curses.error:
+            pass
+    row += 2
+    return row
 
 def main(stdscr, args):
     curses.start_color()
@@ -101,23 +116,25 @@ def main(stdscr, args):
         stdscr.clear()
         max_row, max_col = stdscr.getmaxyx()
         col_width = max_col // 2
-        row_offset = 0
+        left_col_offset = 0
+        right_col_offset = 0
 
         for i, server in enumerate(servers):
-            col = (i % 2) * col_width
-            if i % 2 == 0 and i != 0:
-                row_offset += 20  # Adjusted space between servers
-            if row_offset >= max_row:
-                break  # Stop if we run out of vertical space
-
-            if server in ['.', 'localhost', '127.0.0.1']:
-                nvidiasmi_output = run_nvidiasmi_local()
+            if i % 2 == 0:
+                col = 0
+                row_offset = left_col_offset
+                left_col_offset = display_gpu_infos(stdscr, server, get_gpu_infos(run_nvidiasmi_local() if server in ['.', 'localhost', '127.0.0.1'] else run_nvidiasmi_remote(server, args.ssh_timeout, args.cmd_timeout)), col, row_offset)
             else:
-                nvidiasmi_output = run_nvidiasmi_remote(server, args.ssh_timeout, args.cmd_timeout)
+                col = col_width + 1  # Adjusted for vertical separator
+                row_offset = right_col_offset
+                right_col_offset = display_gpu_infos(stdscr, server, get_gpu_infos(run_nvidiasmi_local() if server in ['.', 'localhost', '127.0.0.1'] else run_nvidiasmi_remote(server, args.ssh_timeout, args.cmd_timeout)), col, row_offset)
 
-            if nvidiasmi_output:
-                gpu_infos = get_gpu_infos(nvidiasmi_output)
-                display_gpu_infos(stdscr, server, gpu_infos, col, row_offset)
+        # Draw vertical separator
+        for row in range(max_row):
+            try:
+                stdscr.addch(row, col_width, '|')
+            except curses.error:
+                pass
 
         stdscr.refresh()
         time.sleep(args.refresh_interval)

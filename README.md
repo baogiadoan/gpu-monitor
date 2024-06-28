@@ -1,3 +1,15 @@
+This is a revised version from: https://github.com/mseitzer/gpu-monitor
+to display used / free GPUs on multiple different servers
+
+
+# Usage
+
+now just need to run `./gpu-monitor.py`
+
+# Demo
+
+![demo pic](demo.png "Demo Pictures")
+
 # Remote GPU Monitor
 
 This Python script allows to check for free Nvidia GPUs in remote servers.
